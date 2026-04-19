@@ -1,0 +1,72 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.13.35913.81
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Diffraction", "Diffraction.csproj", "{DD26AD89-854D-4254-AEF8-3BE7B0DBD149}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Diffraction.Core", "Diffraction.Core\Diffraction.Core.csproj", "{1373088A-1620-4EC0-B063-33A592F52EC1}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Diffraction.Tests", "Diffraction.Tests\Diffraction.Tests.csproj", "{97C99A01-3536-4191-9D63-C375D3A90DCC}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Diffraction.Cuda", "Diffraction.Cuda", "{51A404E1-9C65-4B8A-B75D-383D85128D39}"
+	ProjectSection(SolutionItems) = preProject
+		Diffraction.Cuda\build_cuda.bat = Diffraction.Cuda\build_cuda.bat
+		Diffraction.Cuda\build_cuda.ps1 = Diffraction.Cuda\build_cuda.ps1
+		Diffraction.Cuda\src\DiffractionCuda.cu = Diffraction.Cuda\src\DiffractionCuda.cu
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|Any CPU = Release|Any CPU
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{DD26AD89-854D-4254-AEF8-3BE7B0DBD149}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DD26AD89-854D-4254-AEF8-3BE7B0DBD149}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DD26AD89-854D-4254-AEF8-3BE7B0DBD149}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{DD26AD89-854D-4254-AEF8-3BE7B0DBD149}.Debug|x64.Build.0 = Debug|Any CPU
+		{DD26AD89-854D-4254-AEF8-3BE7B0DBD149}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{DD26AD89-854D-4254-AEF8-3BE7B0DBD149}.Debug|x86.Build.0 = Debug|Any CPU
+		{DD26AD89-854D-4254-AEF8-3BE7B0DBD149}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DD26AD89-854D-4254-AEF8-3BE7B0DBD149}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DD26AD89-854D-4254-AEF8-3BE7B0DBD149}.Release|x64.ActiveCfg = Release|Any CPU
+		{DD26AD89-854D-4254-AEF8-3BE7B0DBD149}.Release|x64.Build.0 = Release|Any CPU
+		{DD26AD89-854D-4254-AEF8-3BE7B0DBD149}.Release|x86.ActiveCfg = Release|Any CPU
+		{DD26AD89-854D-4254-AEF8-3BE7B0DBD149}.Release|x86.Build.0 = Release|Any CPU
+		{1373088A-1620-4EC0-B063-33A592F52EC1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1373088A-1620-4EC0-B063-33A592F52EC1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1373088A-1620-4EC0-B063-33A592F52EC1}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{1373088A-1620-4EC0-B063-33A592F52EC1}.Debug|x64.Build.0 = Debug|Any CPU
+		{1373088A-1620-4EC0-B063-33A592F52EC1}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{1373088A-1620-4EC0-B063-33A592F52EC1}.Debug|x86.Build.0 = Debug|Any CPU
+		{1373088A-1620-4EC0-B063-33A592F52EC1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1373088A-1620-4EC0-B063-33A592F52EC1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1373088A-1620-4EC0-B063-33A592F52EC1}.Release|x64.ActiveCfg = Release|Any CPU
+		{1373088A-1620-4EC0-B063-33A592F52EC1}.Release|x64.Build.0 = Release|Any CPU
+		{1373088A-1620-4EC0-B063-33A592F52EC1}.Release|x86.ActiveCfg = Release|Any CPU
+		{1373088A-1620-4EC0-B063-33A592F52EC1}.Release|x86.Build.0 = Release|Any CPU
+		{97C99A01-3536-4191-9D63-C375D3A90DCC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{97C99A01-3536-4191-9D63-C375D3A90DCC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{97C99A01-3536-4191-9D63-C375D3A90DCC}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{97C99A01-3536-4191-9D63-C375D3A90DCC}.Debug|x64.Build.0 = Debug|Any CPU
+		{97C99A01-3536-4191-9D63-C375D3A90DCC}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{97C99A01-3536-4191-9D63-C375D3A90DCC}.Debug|x86.Build.0 = Debug|Any CPU
+		{97C99A01-3536-4191-9D63-C375D3A90DCC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{97C99A01-3536-4191-9D63-C375D3A90DCC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{97C99A01-3536-4191-9D63-C375D3A90DCC}.Release|x64.ActiveCfg = Release|Any CPU
+		{97C99A01-3536-4191-9D63-C375D3A90DCC}.Release|x64.Build.0 = Release|Any CPU
+		{97C99A01-3536-4191-9D63-C375D3A90DCC}.Release|x86.ActiveCfg = Release|Any CPU
+		{97C99A01-3536-4191-9D63-C375D3A90DCC}.Release|x86.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {12DEBDF0-4DCE-40EC-9591-3E5657A35731}
+	EndGlobalSection
+EndGlobal

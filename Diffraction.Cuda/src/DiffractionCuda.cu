@@ -491,10 +491,52 @@ namespace
     }
 }
 
-int main(int argc, char** argv)
-{
-    try
-    {
+#include <cuda_runtime.h>
+#include <cusolverDn.h>
+#include <cuComplex.h>
+#include <chrono>
+#include <cmath>
+#include <cstring>
+#include <iomanip>
+#include <iostream>
+#include <sstream>
+#include <stdexcept>
+#include <string>
+#include <vector>
+
+// ... (весь ваш код с функциями и ядрами остается без изменений) ...
+
+// Структура для сбора статистики
+struct TimingStats {
+    double context_init_ms = 0.0;
+    double malloc_total_ms = 0.0;
+    double memcpy_h2d_ms = 0.0;
+    double memcpy_d2h_ms = 0.0;
+    double assembly_ms = 0.0;
+    double cusolver_init_ms = 0.0;
+    double solve_ms = 0.0;
+    double free_total_ms = 0.0;
+    double total_ms = 0.0;
+};
+
+void check_cuda(cudaError_t error, const char* message) {
+    if (error != cudaSuccess) {
+        std::ostringstream stream;
+        stream << message << ": " << cudaGetErrorString(error);
+        throw std::runtime_error(stream.str());
+    }
+}
+
+void check_cusolver(cusolverStatus_t status, const char* message) {
+    if (status != CUSOLVER_STATUS_SUCCESS) {
+        std::ostringstream stream;
+        stream << message << ": status=" << static_cast<int>(status);
+        throw std::runtime_error(stream.str());
+    }
+}
+
+int main(int argc, char** argv) {
+    try {
         SolverParameters params = parse_arguments(argc, argv);
         validate_parameters(params);
 
@@ -505,23 +547,38 @@ int main(int argc, char** argv)
             ? ComplexValue(k_wave * params.skin_depth, k_wave * params.skin_depth)
             : ComplexValue();
 
+        // Подготовка данных на CPU
         std::vector<double> tau_q = build_tau_q(params.plate_count, m_quad);
         std::vector<double> tau_c = build_tau_c(params.plate_count, params.n);
         std::vector<double> t_q = build_t_q(params, tau_q, m_quad);
         std::vector<double> w_q = build_w_q(params, m_quad);
         std::vector<double> x_c = build_x_c(params, tau_c);
-
         std::vector<cuDoubleComplex> solution(total_unknowns);
 
+        TimingStats stats;
         auto total_start = std::chrono::high_resolution_clock::now();
 
-        double *d_alpha = nullptr, *d_beta = nullptr, *d_tau_q = nullptr, *d_t_q = nullptr, *d_w_q = nullptr, *d_tau_c = nullptr, *d_x_c = nullptr;
+        // === ЗАМЕР 1: Инициализация CUDA контекста ===
+        auto ctx_start = std::chrono::high_resolution_clock::now();
+        
+        // Первый вызов CUDA API (триггерит инициализацию контекста)
+        int device = 0;
+        cudaSetDevice(device);
+        cudaDeviceSynchronize();  // Ждем завершения инициализации
+        
+        auto ctx_stop = std::chrono::high_resolution_clock::now();
+        stats.context_init_ms = std::chrono::duration<double, std::milli>(ctx_stop - ctx_start).count();
+
+        // === ЗАМЕР 2: Выделение памяти (cudaMalloc) ===
+        auto malloc_start = std::chrono::high_resolution_clock::now();
+
+        double *d_alpha = nullptr, *d_beta = nullptr, *d_tau_q = nullptr, *d_t_q = nullptr, 
+               *d_w_q = nullptr, *d_tau_c = nullptr, *d_x_c = nullptr;
         cuDoubleComplex* d_matrix = nullptr;
         cuDoubleComplex* d_rhs = nullptr;
         cuDoubleComplex* d_work = nullptr;
         int* d_pivots = nullptr;
         int* d_info = nullptr;
-        cusolverDnHandle_t solver_handle = nullptr;
 
         check_cuda(cudaMalloc(&d_alpha, sizeof(double) * params.plate_count), "cudaMalloc(alpha)");
         check_cuda(cudaMalloc(&d_beta, sizeof(double) * params.plate_count), "cudaMalloc(beta)");
@@ -535,6 +592,12 @@ int main(int argc, char** argv)
         check_cuda(cudaMalloc(&d_pivots, sizeof(int) * total_unknowns), "cudaMalloc(pivots)");
         check_cuda(cudaMalloc(&d_info, sizeof(int)), "cudaMalloc(info)");
 
+        auto malloc_stop = std::chrono::high_resolution_clock::now();
+        stats.malloc_total_ms = std::chrono::duration<double, std::milli>(malloc_stop - malloc_start).count();
+
+        // === ЗАМЕР 3: Копирование Host -> Device ===
+        auto h2d_start = std::chrono::high_resolution_clock::now();
+
         check_cuda(cudaMemcpy(d_alpha, params.alpha, sizeof(double) * params.plate_count, cudaMemcpyHostToDevice), "cudaMemcpy(alpha)");
         check_cuda(cudaMemcpy(d_beta, params.beta, sizeof(double) * params.plate_count, cudaMemcpyHostToDevice), "cudaMemcpy(beta)");
         check_cuda(cudaMemcpy(d_tau_q, tau_q.data(), sizeof(double) * tau_q.size(), cudaMemcpyHostToDevice), "cudaMemcpy(tau_q)");
@@ -543,40 +606,27 @@ int main(int argc, char** argv)
         check_cuda(cudaMemcpy(d_tau_c, tau_c.data(), sizeof(double) * tau_c.size(), cudaMemcpyHostToDevice), "cudaMemcpy(tau_c)");
         check_cuda(cudaMemcpy(d_x_c, x_c.data(), sizeof(double) * x_c.size(), cudaMemcpyHostToDevice), "cudaMemcpy(x_c)");
 
-        cudaEvent_t assembly_start = nullptr;
-        cudaEvent_t assembly_stop = nullptr;
+        auto h2d_stop = std::chrono::high_resolution_clock::now();
+        stats.memcpy_h2d_ms = std::chrono::duration<double, std::milli>(h2d_stop - h2d_start).count();
+
+        // === ЗАМЕР 4: Построение матрицы (CUDA Events для GPU) ===
+        cudaEvent_t assembly_start, assembly_stop;
         check_cuda(cudaEventCreate(&assembly_start), "cudaEventCreate(start)");
         check_cuda(cudaEventCreate(&assembly_stop), "cudaEventCreate(stop)");
+        
         check_cuda(cudaEventRecord(assembly_start), "cudaEventRecord(start)");
 
         int matrix_threads = 256;
         int matrix_blocks = (total_unknowns * total_unknowns + matrix_threads - 1) / matrix_threads;
         assemble_matrix_kernel<<<matrix_blocks, matrix_threads>>>(
-            d_matrix,
-            d_alpha,
-            d_beta,
-            d_tau_q,
-            d_t_q,
-            d_w_q,
-            d_tau_c,
-            d_x_c,
-            params.n,
-            params.plate_count,
-            m_quad,
-            k_wave,
-            chi);
+            d_matrix, d_alpha, d_beta, d_tau_q, d_t_q, d_w_q, d_tau_c, d_x_c,
+            params.n, params.plate_count, m_quad, k_wave, chi);
         check_cuda(cudaGetLastError(), "assemble_matrix_kernel launch");
 
         int rhs_threads = 256;
         int rhs_blocks = (total_unknowns + rhs_threads - 1) / rhs_threads;
         assemble_rhs_kernel<<<rhs_blocks, rhs_threads>>>(
-            d_rhs,
-            d_x_c,
-            params.n,
-            params.plate_count,
-            params.theta,
-            k_wave,
-            chi);
+            d_rhs, d_x_c, params.n, params.plate_count, params.theta, k_wave, chi);
         check_cuda(cudaGetLastError(), "assemble_rhs_kernel launch");
 
         check_cuda(cudaEventRecord(assembly_stop), "cudaEventRecord(stop)");
@@ -584,57 +634,50 @@ int main(int argc, char** argv)
 
         float assembly_ms = 0.0f;
         check_cuda(cudaEventElapsedTime(&assembly_ms, assembly_start, assembly_stop), "cudaEventElapsedTime");
+        stats.assembly_ms = static_cast<double>(assembly_ms);
 
+        // === ЗАМЕР 5: Инициализация cuSOLVER ===
+        auto cusolver_start = std::chrono::high_resolution_clock::now();
+
+        cusolverDnHandle_t solver_handle = nullptr;
         check_cusolver(cusolverDnCreate(&solver_handle), "cusolverDnCreate");
+        
         int lwork = 0;
         check_cusolver(
-            cusolverDnZgetrf_bufferSize(
-                solver_handle,
-                total_unknowns,
-                total_unknowns,
-                d_matrix,
-                total_unknowns,
-                &lwork),
+            cusolverDnZgetrf_bufferSize(solver_handle, total_unknowns, total_unknowns, d_matrix, total_unknowns, &lwork),
             "cusolverDnZgetrf_bufferSize");
         check_cuda(cudaMalloc(&d_work, sizeof(cuDoubleComplex) * lwork), "cudaMalloc(work)");
 
-        cudaEvent_t solve_start_event = nullptr;
-        cudaEvent_t solve_stop_event = nullptr;
+        auto cusolver_stop = std::chrono::high_resolution_clock::now();
+        stats.cusolver_init_ms = std::chrono::duration<double, std::milli>(cusolver_stop - cusolver_start).count();
+
+        // === ЗАМЕР 6: Решение СЛАУ (CUDA Events) ===
+        cudaEvent_t solve_start_event, solve_stop_event;
         check_cuda(cudaEventCreate(&solve_start_event), "cudaEventCreate(solve_start)");
         check_cuda(cudaEventCreate(&solve_stop_event), "cudaEventCreate(solve_stop)");
+        
         check_cuda(cudaEventRecord(solve_start_event), "cudaEventRecord(solve_start)");
+        
         check_cusolver(
-            cusolverDnZgetrf(
-                solver_handle,
-                total_unknowns,
-                total_unknowns,
-                d_matrix,
-                total_unknowns,
-                d_work,
-                d_pivots,
-                d_info),
+            cusolverDnZgetrf(solver_handle, total_unknowns, total_unknowns, d_matrix, total_unknowns, d_work, d_pivots, d_info),
             "cusolverDnZgetrf");
         check_cusolver(
-            cusolverDnZgetrs(
-                solver_handle,
-                CUBLAS_OP_N,
-                total_unknowns,
-                1,
-                d_matrix,
-                total_unknowns,
-                d_pivots,
-                d_rhs,
-                total_unknowns,
-                d_info),
+            cusolverDnZgetrs(solver_handle, CUBLAS_OP_N, total_unknowns, 1, d_matrix, total_unknowns, d_pivots, d_rhs, total_unknowns, d_info),
             "cusolverDnZgetrs");
+        
         check_cuda(cudaEventRecord(solve_stop_event), "cudaEventRecord(solve_stop)");
         check_cuda(cudaEventSynchronize(solve_stop_event), "cudaEventSynchronize(solve_stop)");
-        auto total_stop = std::chrono::high_resolution_clock::now();
+
+        float solve_ms_gpu = 0.0f;
+        check_cuda(cudaEventElapsedTime(&solve_ms_gpu, solve_start_event, solve_stop_event), "cudaEventElapsedTime(solve)");
+        stats.solve_ms = static_cast<double>(solve_ms_gpu);
+
+        // === ЗАМЕР 7: Копирование Device -> Host ===
+        auto d2h_start = std::chrono::high_resolution_clock::now();
 
         int info_value = 0;
         check_cuda(cudaMemcpy(&info_value, d_info, sizeof(int), cudaMemcpyDeviceToHost), "cudaMemcpy(info)");
-        if (info_value != 0)
-        {
+        if (info_value != 0) {
             std::ostringstream stream;
             stream << "cuSOLVER returned info=" << info_value;
             throw std::runtime_error(stream.str());
@@ -642,10 +685,14 @@ int main(int argc, char** argv)
 
         check_cuda(cudaMemcpy(solution.data(), d_rhs, sizeof(cuDoubleComplex) * total_unknowns, cudaMemcpyDeviceToHost), "cudaMemcpy(solution)");
 
-        float solve_ms_gpu = 0.0f;
-        check_cuda(cudaEventElapsedTime(&solve_ms_gpu, solve_start_event, solve_stop_event), "cudaEventElapsedTime(solve)");
-        double solve_ms = static_cast<double>(solve_ms_gpu);
-        double total_ms = std::chrono::duration<double, std::milli>(total_stop - total_start).count();
+        auto d2h_stop = std::chrono::high_resolution_clock::now();
+        stats.memcpy_d2h_ms = std::chrono::duration<double, std::milli>(d2h_stop - d2h_start).count();
+
+        auto total_stop = std::chrono::high_resolution_clock::now();
+        stats.total_ms = std::chrono::duration<double, std::milli>(total_stop - total_start).count();
+
+        // === ЗАМЕР 8: Освобождение памяти ===
+        auto free_start = std::chrono::high_resolution_clock::now();
 
         cudaEventDestroy(assembly_start);
         cudaEventDestroy(assembly_stop);
@@ -665,7 +712,12 @@ int main(int argc, char** argv)
         cudaFree(d_pivots);
         cudaFree(d_info);
 
+        auto free_stop = std::chrono::high_resolution_clock::now();
+        stats.free_total_ms = std::chrono::duration<double, std::milli>(free_stop - free_start).count();
+
+        // === ВЫВОД СТАТИСТИКИ ===
         std::cout << std::setprecision(17);
+        std::cout << "\n=== ДЕТАЛЬНЫЙ ТАЙМИНГ ===\n";
         std::cout << "status=ok\n";
         std::cout << "backend=CUDA (matrix + solve)\n";
         std::cout << "alpha1=" << params.alpha[0] << "\n";
@@ -680,15 +732,32 @@ int main(int argc, char** argv)
         std::cout << "m_quad=" << m_quad << "\n";
         std::cout << "chi_re=" << chi.re << "\n";
         std::cout << "chi_im=" << chi.im << "\n";
-        std::cout << "assembly_ms=" << static_cast<double>(assembly_ms) << "\n";
-        std::cout << "solve_ms=" << solve_ms << "\n";
-        std::cout << "total_ms=" << total_ms << "\n";
+        
+        std::cout << "\n--- ВРЕМЕННЫЕ ЗАТРАТЫ ---\n";
+        std::cout << "context_init_ms=" << stats.context_init_ms << "\n";
+        std::cout << "malloc_total_ms=" << stats.malloc_total_ms << "\n";
+        std::cout << "memcpy_h2d_ms=" << stats.memcpy_h2d_ms << "\n";
+        std::cout << "assembly_ms=" << stats.assembly_ms << "\n";
+        std::cout << "cusolver_init_ms=" << stats.cusolver_init_ms << "\n";
+        std::cout << "solve_ms=" << stats.solve_ms << "\n";
+        std::cout << "memcpy_d2h_ms=" << stats.memcpy_d2h_ms << "\n";
+        std::cout << "free_total_ms=" << stats.free_total_ms << "\n";
+        std::cout << "total_ms=" << stats.total_ms << "\n";
+        
+        // Подсчет суммы компонент
+        double sum_components = stats.context_init_ms + stats.malloc_total_ms + 
+                               stats.memcpy_h2d_ms + stats.assembly_ms + 
+                               stats.cusolver_init_ms + stats.solve_ms + 
+                               stats.memcpy_d2h_ms + stats.free_total_ms;
+        std::cout << "sum_of_components_ms=" << sum_components << "\n";
+        std::cout << "overhead_ms=" << (stats.total_ms - sum_components) << "\n";
+        
         for (int i = 0; i < static_cast<int>(solution.size()); ++i)
             std::cout << "coeff_" << i << "=" << cuCreal(solution[i]) << "," << cuCimag(solution[i]) << "\n";
+        
         return 0;
     }
-    catch (const std::exception& ex)
-    {
+    catch (const std::exception& ex) {
         std::cerr << "status=error\n";
         std::cerr << "message=" << ex.what() << "\n";
         return 1;

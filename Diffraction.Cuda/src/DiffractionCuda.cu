@@ -357,25 +357,6 @@ namespace
         }
     }
 
-    void check_cuda(cudaError_t error, const char* message)
-    {
-        if (error != cudaSuccess)
-        {
-            std::ostringstream stream;
-            stream << message << ": " << cudaGetErrorString(error);
-            throw std::runtime_error(stream.str());
-        }
-    }
-
-    void check_cusolver(cusolverStatus_t status, const char* message)
-    {
-        if (status != CUSOLVER_STATUS_SUCCESS)
-        {
-            std::ostringstream stream;
-            stream << message << ": status=" << static_cast<int>(status);
-            throw std::runtime_error(stream.str());
-        }
-    }
 
     SolverParameters parse_arguments(int argc, char** argv)
     {
@@ -491,22 +472,6 @@ namespace
     }
 }
 
-#include <cuda_runtime.h>
-#include <cusolverDn.h>
-#include <cuComplex.h>
-#include <chrono>
-#include <cmath>
-#include <cstring>
-#include <iomanip>
-#include <iostream>
-#include <sstream>
-#include <stdexcept>
-#include <string>
-#include <vector>
-
-// ... (весь ваш код с функциями и ядрами остается без изменений) ...
-
-// Структура для сбора статистики
 struct TimingStats {
     double context_init_ms = 0.0;
     double malloc_total_ms = 0.0;
@@ -519,7 +484,7 @@ struct TimingStats {
     double total_ms = 0.0;
 };
 
-void check_cuda(cudaError_t error, const char* message) {
+inline void check_cuda(cudaError_t error, const char* message) {
     if (error != cudaSuccess) {
         std::ostringstream stream;
         stream << message << ": " << cudaGetErrorString(error);
@@ -527,7 +492,7 @@ void check_cuda(cudaError_t error, const char* message) {
     }
 }
 
-void check_cusolver(cusolverStatus_t status, const char* message) {
+inline void check_cusolver(cusolverStatus_t status, const char* message) {
     if (status != CUSOLVER_STATUS_SUCCESS) {
         std::ostringstream stream;
         stream << message << ": status=" << static_cast<int>(status);
